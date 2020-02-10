@@ -52,6 +52,7 @@ func watcher(clientset *kubernetes.Clientset, watchpods watch.Interface, podCach
 }
 
 func main() {
+	logrus.SetLevel(logrus.DebugLevel)
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -76,6 +77,7 @@ func main() {
 		parts := strings.Split(url, "/")
 		name := parts[2]
 		namespace := parts[1]
+		logrus.WithField("name", name).WithField("namespace", namespace).Debug("Looking up pod")
 		pod, ok := podCache.Get(namespace, name)
 		if ok {
 			w.WriteHeader(http.StatusAccepted)
