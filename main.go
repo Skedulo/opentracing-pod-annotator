@@ -15,6 +15,7 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -78,16 +79,24 @@ func main() {
 		if len(parts) < 4 {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(fmt.Sprintf("%s not of form /pod/namespace/name", url)))
-		}
-		name := parts[3]
-		namespace := parts[2]
-		logrus.WithField("name", name).WithField("namespace", namespace).Debug("Looking up pod")
-		pod, ok := podCache.Get(namespace, name)
-		if ok {
-			w.WriteHeader(http.StatusAccepted)
-			w.Write([]byte(fmt.Sprintf("%#v", pod)))
 		} else {
-			w.WriteHeader(http.StatusNotFound)
+			name := parts[3]
+			namespace := parts[2]
+			logrus.WithField("name", name).WithField("namespace", namespace).Debug("Looking up pod")
+			pod, ok := podCache.Get(namespace, name)
+			if ok {
+
+				out, err := json.Marshal(pod.ObjectMeta.Labels)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					logrus.WithError(err).Warn("Could not convert pod labels to JSON")
+				} else {
+					w.WriteHeader(http.StatusOK)
+					w.Write(out)
+				}
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+			}
 		}
 	})
 	server := &http.Server{
