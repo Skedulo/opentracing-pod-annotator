@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opentracing-annotator
+  namespace: default
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: opentracing-annotator
+rules:
+- apiGroups:
+    - ""
+  resources:
+    - pods
+  verbs:
+    - get
+    - list
+    - watch
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: opentracing-annotator
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: opentracing-annotator
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: opentracing-annotator
+---
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opentracing-annotator
+  namespace: default
+  labels:
+    app: opentracing-annotator
+spec:
+  revisionHistoryLimit: 3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opentracing-annotator
+  template:
+    metadata:
+      labels:
+        app: opentracing-annotator
+    spec:
+      serviceAccountName: opentracing-annotator
+      containers:
+        - name: opentracing-annotator
+          image: opentracing-annotator:v0.1
+          imagePullPolicy: IfNotPresent
