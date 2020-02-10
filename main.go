@@ -75,8 +75,12 @@ func main() {
 	mux.HandleFunc("/pod/", func(w http.ResponseWriter, r *http.Request) {
 		url := r.URL.Path
 		parts := strings.Split(url, "/")
-		name := parts[2]
-		namespace := parts[1]
+		if len(parts) < 4 {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(fmt.Sprintf("%s not of form /pod/namespace/name", url)))
+		}
+		name := parts[3]
+		namespace := parts[2]
 		logrus.WithField("name", name).WithField("namespace", namespace).Debug("Looking up pod")
 		pod, ok := podCache.Get(namespace, name)
 		if ok {
