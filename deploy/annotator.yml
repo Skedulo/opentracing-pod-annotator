@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: opentracing-annotator
+  name: opentracing-pod-annotator
   namespace: default
 ---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: opentracing-annotator
+  name: opentracing-pod-annotator
 rules:
 - apiGroups:
     - ""
@@ -21,38 +21,53 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: opentracing-annotator
+  name: opentracing-pod-annotator
   namespace: default
 subjects:
 - kind: ServiceAccount
-  name: opentracing-annotator
+  name: opentracing-pod-annotator
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: opentracing-annotator
+  name: opentracing-pod-annotator
 ---
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: opentracing-annotator
+  name: opentracing-pod-annotator
   namespace: default
   labels:
-    app: opentracing-annotator
+    app: opentracing-pod-annotator
 spec:
   revisionHistoryLimit: 3
   replicas: 1
   selector:
     matchLabels:
-      app: opentracing-annotator
+      app: opentracing-pod-annotator
   template:
     metadata:
       labels:
-        app: opentracing-annotator
+        app: opentracing-pod-annotator
     spec:
-      serviceAccountName: opentracing-annotator
+      serviceAccountName: opentracing-pod-annotator
       containers:
-        - name: opentracing-annotator
-          image: opentracing-annotator:v0.1
+        - name: opentracing-pod-annotator
+          image: opentracing-pod-annotator:v0.1-0-g4629325
           imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opentracing-pod-annotator
+  namespace: default
+  labels:
+    app: opentracing-pod-annotator
+spec:
+  selector:
+    app: opentracing-pod-annotator
+  ports:
+    - name: http
+      port: 8080
+  type: NodePort
