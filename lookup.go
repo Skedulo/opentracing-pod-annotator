@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
@@ -19,24 +18,21 @@ func NewPodCache() *PodCache {
 	return podCache
 }
 
-func (p *PodCache) Get(name string, namespace string) (*v1.Pod, bool) {
-	key := fmt.Sprintf("%s.%s", namespace, name)
+func (p *PodCache) Get(name string) (*v1.Pod, bool) {
 	p.RLock()
-	entry, ok := p.cache[key]
+	entry, ok := p.cache[name]
 	p.RUnlock()
 	return entry, ok
 }
 
-func (p *PodCache) Delete(name string, namespace string) {
-	key := fmt.Sprintf("%s.%s", namespace, name)
+func (p *PodCache) Delete(name string) {
 	p.Lock()
 	defer p.Unlock()
-	delete(p.cache, key)
+	delete(p.cache, name)
 }
 
-func (p *PodCache) Set(name string, namespace string, pod *v1.Pod) {
-	key := fmt.Sprintf("%s.%s", namespace, name)
+func (p *PodCache) Set(name string, pod *v1.Pod) {
 	p.Lock()
 	defer p.Unlock()
-	p.cache[key] = pod
+	p.cache[name] = pod
 }

@@ -16,12 +16,13 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"flag"
 	"log"
-	"net/http"
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/willthames/opentracing-processor/processor"
+	"github.com/willthames/opentracing-processor/span"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -38,22 +39,91 @@ import (
 	// _ "k8s.io/client-go/plugin/pkg/client/auth/openstack"
 )
 
+type PodProcessorApp struct {
+	processor.App
+	labels   map[string]bool
+	podCache *PodCache
+}
+
+func NewPodProcessorApp() *PodProcessorApp {
+	a := new(PodProcessorApp)
+	a.podCache = NewPodCache()
+	labelValue := flag.String("labels", "", "comma-separated list of labels")
+	a.BaseCLI()
+	flag.Parse()
+
+	if len(*labelValue) > 0 {
+		labels := strings.Split(*labelValue, ",")
+		if len(labels) > 0 {
+			a.labels = make(map[string]bool, len(labels))
+			for _, label := range labels {
+				a.labels[label] = true
+			}
+		}
+	}
+	return a
+}
+
+func (a *PodProcessorApp) receiveSpan(span *span.Span) {
+	podName := ""
+	for _, ba := range span.BinaryAnnotations {
+		if ba.Key == "pod_name" {
+			podName = ba.Value.(string)
+			break
+		}
+	}
+	pod, _ := a.podCache.Get(podName)
+	for key, value := range pod.ObjectMeta.Labels {
+		if len(a.labels) != 0 {
+			_, ok := a.labels[key]
+			if !ok {
+				continue
+			}
+		}
+		span.AddTag(key, value)
+	}
+	a.writeSpan(span)
+}
+
+func (a *PodProcessorApp) writeSpan(wspan *span.Span) error {
+	spans := []*span.Span{wspan}
+	body, err := json.Marshal(spans)
+	if err != nil {
+		logrus.WithError(err).WithField("span", wspan).Error("Error converting span to JSON")
+		return err
+	}
+	if a.Forwarder != nil {
+		if err := a.Forwarder.Send(processor.Payload{ContentType: "application/json", Body: body}); err != nil {
+			logrus.WithError(err).Error("Error forwarding trace")
+			logrus.WithField("body", body).Debug("Error forwarding trace body")
+			return err
+		}
+		logrus.WithField("span", wspan).Debug("accepting span")
+	} else {
+		logrus.WithField("span", wspan).Info("dry-run: would have forwarded span")
+	}
+	return nil
+}
+
 func watcher(clientset *kubernetes.Clientset, watchpods watch.Interface, podCache *PodCache) {
 	for event := range watchpods.ResultChan() {
 		p := event.Object.(*v1.Pod)
 		switch event.Type {
 		case watch.Added:
-			podCache.Set(p.ObjectMeta.Namespace, p.ObjectMeta.Name, p)
+			existing, ok := podCache.Get(p.ObjectMeta.Name)
+			if ok && p.ObjectMeta.Namespace != existing.ObjectMeta.Namespace {
+				logrus.WithField("name", existing.ObjectMeta.Name).WithField("namespace", existing.ObjectMeta.Namespace).Warn("Pod already exists in cache")
+			}
+			podCache.Set(p.ObjectMeta.Name, p)
 			logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Added pod to cache")
 		case watch.Deleted:
-			podCache.Delete(p.ObjectMeta.Namespace, p.ObjectMeta.Name)
+			podCache.Delete(p.ObjectMeta.Name)
 			logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Deleted pod from cache")
 		}
 	}
 }
 
 func main() {
-	logrus.SetLevel(logrus.DebugLevel)
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -68,40 +138,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-
-	podCache := NewPodCache()
-	go watcher(clientset, watchpods, podCache)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/pod/", func(w http.ResponseWriter, r *http.Request) {
-		url := r.URL.Path
-		parts := strings.Split(url, "/")
-		if len(parts) < 4 {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(fmt.Sprintf("%s not of form /pod/namespace/name", url)))
-		} else {
-			name := parts[3]
-			namespace := parts[2]
-			logrus.WithField("name", name).WithField("namespace", namespace).Debug("Looking up pod")
-			pod, ok := podCache.Get(namespace, name)
-			if ok {
-
-				out, err := json.Marshal(pod.ObjectMeta.Labels)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					logrus.WithError(err).Warn("Could not convert pod labels to JSON")
-				} else {
-					w.WriteHeader(http.StatusOK)
-					w.Write(out)
-				}
-			} else {
-				w.WriteHeader(http.StatusNotFound)
-			}
-		}
-	})
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", 8080),
-		Handler: mux,
-	}
-	server.ListenAndServe()
+	a := NewPodProcessorApp()
+	go watcher(clientset, watchpods, a.podCache)
+	a.Serve()
 }

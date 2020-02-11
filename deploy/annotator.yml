@@ -54,7 +54,7 @@ spec:
       serviceAccountName: opentracing-pod-annotator
       containers:
         - name: opentracing-pod-annotator
-          image: opentracing-pod-annotator:v0.1-3-ga448110
+          image: opentracing-pod-annotator:v0.1-4-g7f2f11b
           imagePullPolicy: IfNotPresent
 ---
 apiVersion: v1
