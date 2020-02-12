@@ -24,6 +24,7 @@ import (
 	"github.com/willthames/opentracing-processor/processor"
 	"github.com/willthames/opentracing-processor/span"
 	v1 "k8s.io/api/core/v1"
+	errors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -41,14 +42,17 @@ import (
 
 type PodProcessorApp struct {
 	processor.App
-	labels   map[string]bool
-	podCache *PodCache
+	labels     map[string]bool
+	namespaces []string
+	podCache   *PodCache
 }
 
 func NewPodProcessorApp() *PodProcessorApp {
 	a := new(PodProcessorApp)
 	a.podCache = NewPodCache()
-	labelValue := flag.String("labels", "", "comma-separated list of labels")
+	labelValue := flag.String("labels", "", "comma-separated list of labels to use as tags (default is all)")
+	namespaceValue := flag.String("namespaces", "", "comma-separated list of namespaces to watch (default is all)")
+
 	a.BaseCLI()
 	flag.Parse()
 
@@ -60,6 +64,9 @@ func NewPodProcessorApp() *PodProcessorApp {
 				a.labels[label] = true
 			}
 		}
+	}
+	if len(*namespaceValue) > 0 {
+		a.namespaces = strings.Split(*namespaceValue, ",")
 	}
 	return a
 }
@@ -105,7 +112,16 @@ func (a *PodProcessorApp) writeSpan(wspan *span.Span) error {
 	return nil
 }
 
-func watcher(clientset *kubernetes.Clientset, watchpods watch.Interface, podCache *PodCache) {
+func watcher(clientset *kubernetes.Clientset, podCache *PodCache, namespace string) {
+	watchpods, err := clientset.CoreV1().Pods(namespace).Watch(metav1.ListOptions{})
+	if err != nil {
+		switch statusErr := err.(type) {
+		case *errors.StatusError:
+			log.Fatalf("Could not watch pods (%#v): %s ", statusErr.ErrStatus.Details, statusErr.ErrStatus.Reason)
+		default:
+			log.Fatalf("Could not watch pods: %#v", err)
+		}
+	}
 	for event := range watchpods.ResultChan() {
 		p := event.Object.(*v1.Pod)
 		switch event.Type {
@@ -134,11 +150,13 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	watchpods, err := clientset.CoreV1().Pods("").Watch(metav1.ListOptions{})
-	if err != nil {
-		log.Fatal(err.Error())
-	}
 	a := NewPodProcessorApp()
-	go watcher(clientset, watchpods, a.podCache)
+	if len(a.namespaces) > 0 {
+		for _, namespace := range a.namespaces {
+			go watcher(clientset, a.podCache, namespace)
+		}
+	} else {
+		go watcher(clientset, a.podCache, "")
+	}
 	a.Serve()
 }
