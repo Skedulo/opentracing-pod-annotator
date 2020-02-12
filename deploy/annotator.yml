@@ -56,6 +56,8 @@ spec:
         - name: opentracing-pod-annotator
           image: opentracing-pod-annotator:v0.1-4-g7f2f11b
           imagePullPolicy: IfNotPresent
+          args:
+            - --log-level=debug
 ---
 apiVersion: v1
 kind: Service

@@ -10,4 +10,4 @@ RUN go build ./... && go test ./... && go install ./...
 FROM alpine:3.11
 COPY --from=builder /go/bin/opentracing-annotator /go/bin/opentracing-annotator
 EXPOSE 9411
-CMD ["/go/bin/opentracing-annotator"]
+ENTRYPOINT ["/go/bin/opentracing-annotator"]
