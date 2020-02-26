@@ -74,18 +74,15 @@ func NewPodProcessorApp() *PodProcessorApp {
 func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 	podName := ""
 	for _, ba := range span.BinaryAnnotations {
+		logrus.WithField("annotation", ba).Debug("BinaryAnnotation")
 		if ba.Key == "pod_name" {
 			podName = ba.Value.(string)
 			break
 		}
 	}
-	for _, ann := range span.Annotations {
-		logrus.WithField("annotation", ann).Debug("Annotation")
-		if podName != "" {
-			if ann.Host != nil {
-				podName = ann.Host.ServiceName
-			}
-		}
+	if podName == "" {
+		a.writeSpan(span)
+		return
 	}
 	pod, ok := a.podCache.Get(podName)
 	if ok {
