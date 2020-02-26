@@ -79,6 +79,14 @@ func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 			break
 		}
 	}
+	for _, ann := range span.Annotations {
+		logrus.WithField("annotation", ann).Debug("Annotation")
+		if podName != "" {
+			if ann.Host != nil {
+				podName = ann.Host.ServiceName
+			}
+		}
+	}
 	pod, ok := a.podCache.Get(podName)
 	if ok {
 		for key, value := range pod.ObjectMeta.Labels {
