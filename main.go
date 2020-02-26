@@ -11,7 +11,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Note: the example only works with the code within the same release/branch.
 package main
 
 import (
@@ -72,7 +71,7 @@ func NewPodProcessorApp() *PodProcessorApp {
 	return a
 }
 
-func (a *PodProcessorApp) receiveSpan(span *span.Span) {
+func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 	podName := ""
 	for _, ba := range span.BinaryAnnotations {
 		if ba.Key == "pod_name" {

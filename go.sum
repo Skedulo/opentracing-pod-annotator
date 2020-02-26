@@ -187,6 +187,10 @@ github.com/willthames/opentracing-processor v0.1.3 h1:gZ7qoGXCnUl8FFWAamGfDOA//e
 github.com/willthames/opentracing-processor v0.1.3/go.mod h1:0rZpqcWtxUBypqoweHndyRWgMGiKHwLs2mIvxlRhTXc=
 github.com/willthames/opentracing-processor v0.2.0 h1:FQ0+1EXvYZ8rMbNRJVp1kExRoi994okaxPOqV4Ci2J0=
 github.com/willthames/opentracing-processor v0.2.0/go.mod h1:0rZpqcWtxUBypqoweHndyRWgMGiKHwLs2mIvxlRhTXc=
+github.com/willthames/opentracing-processor v0.2.1 h1:ItTdoN8RPU4b+oHoQfLYLglBQbM6Euk3VSX3fxFf+y4=
+github.com/willthames/opentracing-processor v0.2.1/go.mod h1:0rZpqcWtxUBypqoweHndyRWgMGiKHwLs2mIvxlRhTXc=
+github.com/willthames/opentracing-processor v0.2.2 h1:7qV3KID3BtMB38+MlTDM2dxTyMhqwKBuZw6lk3HbS6s=
+github.com/willthames/opentracing-processor v0.2.2/go.mod h1:0rZpqcWtxUBypqoweHndyRWgMGiKHwLs2mIvxlRhTXc=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
 go.uber.org/atomic v1.5.1 h1:rsqfU5vBkVknbhUGbAUwQKR2H4ItV8tjJ+6kJX4cxHM=

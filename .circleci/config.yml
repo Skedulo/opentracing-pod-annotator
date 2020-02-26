@@ -1,0 +1,50 @@
+---
+version: 2.1
+
+jobs:
+  build:
+    docker:
+      - image: docker:18.06.1-ce-git
+
+    steps:
+      - checkout
+
+      - setup_remote_docker
+
+      - restore_cache:
+          keys:
+            - v1-layer-cache
+
+      - run:
+          name: Restore docker image layer cache
+          command: |
+            if [ -f "image.tar" ]; then
+              docker load -i image.tar
+            fi
+
+      - run:
+          name: Build docker image
+          command: |
+            docker build -t ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} .
+
+      - run:
+          name: Export docker image layer cache
+          command: |
+            set -x
+            IMG="${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1}"
+            docker save -o image.tar "$IMG" $(docker history -q $IMG | sed -e 's/<missing>//')
+
+      - save_cache:
+          key: v1-layer-cache-{{ .Revision }}
+          paths:
+            - image.tar
+
+      - deploy:
+          name: Push resulting docker image to remote repository
+          command: |
+            TAG="$(git describe)"
+            docker login -u ${DOCKER_USER} -p ${DOCKER_PASS} ${DOCKER_REGISTRY}
+            docker tag  ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} ${DOCKER_REGISTRY}/${DOCKER_REPO}:${TAG}
+            docker tag  ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} ${DOCKER_REGISTRY}/${DOCKER_REPO}:latest
+            docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:${TAG}
+            docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:latest
