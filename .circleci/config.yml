@@ -42,7 +42,7 @@ jobs:
       - deploy:
           name: Push resulting docker image to remote repository
           command: |
-            TAG="$(git describe)"
+            TAG="$(git describe --long --tags)"
             docker login -u ${DOCKER_USER} -p ${DOCKER_PASS} ${DOCKER_REGISTRY}
             docker tag  ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} ${DOCKER_REGISTRY}/${DOCKER_REPO}:${TAG}
             docker tag  ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} ${DOCKER_REGISTRY}/${DOCKER_REPO}:latest
