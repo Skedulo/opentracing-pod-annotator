@@ -50,6 +50,7 @@ type PodProcessorApp struct {
 func NewPodProcessorApp() *PodProcessorApp {
 	a := new(PodProcessorApp)
 	a.podCache = NewPodCache()
+	a.Receiver = a
 	labelValue := flag.String("labels", "", "comma-separated list of labels to use as tags (default is all)")
 	namespaceValue := flag.String("namespaces", "", "comma-separated list of namespaces to watch (default is all)")
 
@@ -79,15 +80,19 @@ func (a *PodProcessorApp) receiveSpan(span *span.Span) {
 			break
 		}
 	}
-	pod, _ := a.podCache.Get(podName)
-	for key, value := range pod.ObjectMeta.Labels {
-		if len(a.labels) != 0 {
-			_, ok := a.labels[key]
-			if !ok {
-				continue
+	pod, ok := a.podCache.Get(podName)
+	if ok {
+		for key, value := range pod.ObjectMeta.Labels {
+			if len(a.labels) != 0 {
+				_, ok = a.labels[key]
+				if !ok {
+					continue
+				}
 			}
+			span.AddTag(key, value)
 		}
-		span.AddTag(key, value)
+	} else {
+		logrus.WithField("pod", podName).Info("span received for pod not in cache")
 	}
 	a.writeSpan(span)
 }

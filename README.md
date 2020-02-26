@@ -11,3 +11,11 @@ issues or performance issues in very large environments, so namespaces can
 be limited to a subset using the `--namespaces` argument. This does mean that
 the annotator might receive spans from pods that it can't annotate - so namespaced
 annotators might make sense in that scenario.
+
+## Deployment
+
+Currently this needs to run inside Kubernetes with appropriate RBAC
+permissions.
+
+`deploy/annotator.yml` is likely to be a reasonable starting point, but you may
+want to use RoleBindings to restrict the permissions to specific namespaces.
