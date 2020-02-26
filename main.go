@@ -44,6 +44,8 @@ type PodProcessorApp struct {
 	labels     map[string]bool
 	namespaces []string
 	podCache   *PodCache
+	tagPrefix  string
+	podNameTag string
 }
 
 func NewPodProcessorApp() *PodProcessorApp {
@@ -52,6 +54,8 @@ func NewPodProcessorApp() *PodProcessorApp {
 	a.Receiver = a
 	labelValue := flag.String("labels", "", "comma-separated list of labels to use as tags (default is all)")
 	namespaceValue := flag.String("namespaces", "", "comma-separated list of namespaces to watch (default is all)")
+	tagPrefixValue := flag.String("tag-prefix", "", "prefix to insert in front of the tag name")
+	podNameTagValue := flag.String("pod-name-tag", "pod_name", "name of the tag containing the pod name")
 
 	a.BaseCLI()
 	flag.Parse()
@@ -68,6 +72,8 @@ func NewPodProcessorApp() *PodProcessorApp {
 	if len(*namespaceValue) > 0 {
 		a.namespaces = strings.Split(*namespaceValue, ",")
 	}
+	a.tagPrefix = *tagPrefixValue
+	a.podNameTag = *podNameTagValue
 	return a
 }
 
@@ -75,7 +81,7 @@ func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 	podName := ""
 	for _, ba := range span.BinaryAnnotations {
 		logrus.WithField("annotation", ba).Debug("BinaryAnnotation")
-		if ba.Key == "pod_name" {
+		if ba.Key == a.podNameTag {
 			podName = ba.Value.(string)
 			break
 		}
@@ -93,7 +99,7 @@ func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 					continue
 				}
 			}
-			span.AddTag(key, value)
+			span.AddTag(a.tagPrefix+key, value)
 		}
 	} else {
 		logrus.WithField("pod", podName).Info("span received for pod not in cache")
