@@ -54,7 +54,7 @@ spec:
       serviceAccountName: opentracing-pod-annotator
       containers:
         - name: opentracing-pod-annotator
-          image: quay.io/skedulo/opentracing-pod-annotator:v0.1-7-gd6272cc
+          image: quay.io/skedulo/opentracing-pod-annotator:v0.1-16-g3928297
           imagePullPolicy: IfNotPresent
           args:
             - --log-level=debug
