@@ -41,11 +41,11 @@ import (
 
 type PodProcessorApp struct {
 	processor.App
-	labels     map[string]bool
-	namespaces []string
-	podCache   *PodCache
-	tagPrefix  string
-	podNameTag string
+	labels      map[string]struct{}
+	namespaces  []string
+	podCache    *PodCache
+	tagPrefix   string
+	podNameTags map[string]struct{}
 }
 
 func NewPodProcessorApp() *PodProcessorApp {
@@ -55,25 +55,29 @@ func NewPodProcessorApp() *PodProcessorApp {
 	labelValue := flag.String("labels", "", "comma-separated list of labels to use as tags (default is all)")
 	namespaceValue := flag.String("namespaces", "", "comma-separated list of namespaces to watch (default is all)")
 	tagPrefixValue := flag.String("tag-prefix", "", "prefix to insert in front of the tag name")
-	podNameTagValue := flag.String("pod-name-tag", "pod_name", "name of the tag containing the pod name")
+	podNameTagValue := flag.String("pod-name-tags", "pod_name", "comma-separated list of tags containing the pod name")
 
 	a.BaseCLI()
 	flag.Parse()
 
 	if len(*labelValue) > 0 {
 		labels := strings.Split(*labelValue, ",")
-		if len(labels) > 0 {
-			a.labels = make(map[string]bool, len(labels))
-			for _, label := range labels {
-				a.labels[label] = true
-			}
+		a.labels = make(map[string]struct{}, len(labels))
+		for _, label := range labels {
+			a.labels[label] = struct{}{}
+		}
+	}
+	if len(*podNameTagValue) > 0 {
+		podNameTags := strings.Split(*podNameTagValue, ",")
+		a.podNameTags = make(map[string]struct{}, len(podNameTags))
+		for _, podNameTag := range podNameTags {
+			a.podNameTags[podNameTag] = struct{}{}
 		}
 	}
 	if len(*namespaceValue) > 0 {
 		a.namespaces = strings.Split(*namespaceValue, ",")
 	}
 	a.tagPrefix = *tagPrefixValue
-	a.podNameTag = *podNameTagValue
 	return a
 }
 
@@ -81,7 +85,8 @@ func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 	podName := ""
 	for _, ba := range span.BinaryAnnotations {
 		logrus.WithField("annotation", ba).Debug("BinaryAnnotation")
-		if ba.Key == a.podNameTag {
+		_, ok := a.podNameTags[ba.Key]
+		if ok {
 			podName = ba.Value.(string)
 			break
 		}
@@ -154,7 +159,7 @@ func watcher(clientset *kubernetes.Clientset, podCache *PodCache, namespace stri
 	}
 }
 
-func main() {
+func connectCluster() *kubernetes.Clientset {
 	// creates the in-cluster config
 	config, err := rest.InClusterConfig()
 	if err != nil {
@@ -165,7 +170,12 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
+	return clientset
+}
+
+func main() {
 	a := NewPodProcessorApp()
+	clientset := connectCluster()
 	if len(a.namespaces) > 0 {
 		for _, namespace := range a.namespaces {
 			go watcher(clientset, a.podCache, namespace)
