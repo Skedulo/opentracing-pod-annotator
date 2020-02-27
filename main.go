@@ -14,9 +14,12 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -84,7 +87,6 @@ func NewPodProcessorApp() *PodProcessorApp {
 func (a *PodProcessorApp) ReceiveSpan(span *span.Span) {
 	podName := ""
 	for _, ba := range span.BinaryAnnotations {
-		logrus.WithField("annotation", ba).Debug("BinaryAnnotation")
 		_, ok := a.podNameTags[ba.Key]
 		if ok {
 			podName = ba.Value.(string)
@@ -132,7 +134,7 @@ func (a *PodProcessorApp) writeSpan(wspan *span.Span) error {
 	return nil
 }
 
-func watcher(clientset *kubernetes.Clientset, podCache *PodCache, namespace string) {
+func watcher(ctx context.Context, clientset *kubernetes.Clientset, podCache *PodCache, namespace string) {
 	watchpods, err := clientset.CoreV1().Pods(namespace).Watch(metav1.ListOptions{})
 	if err != nil {
 		switch statusErr := err.(type) {
@@ -142,19 +144,25 @@ func watcher(clientset *kubernetes.Clientset, podCache *PodCache, namespace stri
 			log.Fatalf("Could not watch pods: %#v", err)
 		}
 	}
-	for event := range watchpods.ResultChan() {
-		p := event.Object.(*v1.Pod)
-		switch event.Type {
-		case watch.Added:
-			existing, ok := podCache.Get(p.ObjectMeta.Name)
-			if ok && p.ObjectMeta.Namespace != existing.ObjectMeta.Namespace {
-				logrus.WithField("name", existing.ObjectMeta.Name).WithField("namespace", existing.ObjectMeta.Namespace).Warn("Pod already exists in cache")
+	for {
+		select {
+		case event := <-watchpods.ResultChan():
+			p := event.Object.(*v1.Pod)
+			switch event.Type {
+			case watch.Added:
+				existing, ok := podCache.Get(p.ObjectMeta.Name)
+				if ok && p.ObjectMeta.Namespace != existing.ObjectMeta.Namespace {
+					logrus.WithField("name", existing.ObjectMeta.Name).WithField("namespace", existing.ObjectMeta.Namespace).Warn("Pod already exists in cache")
+				}
+				podCache.Set(p.ObjectMeta.Name, p)
+				logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Added pod to cache")
+			case watch.Deleted:
+				podCache.Delete(p.ObjectMeta.Name)
+				logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Deleted pod from cache")
 			}
-			podCache.Set(p.ObjectMeta.Name, p)
-			logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Added pod to cache")
-		case watch.Deleted:
-			podCache.Delete(p.ObjectMeta.Name)
-			logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Deleted pod from cache")
+		case <-ctx.Done():
+			watchpods.Stop()
+			return
 		}
 	}
 }
@@ -176,12 +184,17 @@ func connectCluster() *kubernetes.Clientset {
 func main() {
 	a := NewPodProcessorApp()
 	clientset := connectCluster()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	if len(a.namespaces) > 0 {
 		for _, namespace := range a.namespaces {
-			go watcher(clientset, a.podCache, namespace)
+			go watcher(ctx, clientset, a.podCache, namespace)
 		}
 	} else {
-		go watcher(clientset, a.podCache, "")
+		go watcher(ctx, clientset, a.podCache, "")
 	}
 	a.Serve()
+	<-sigCh
 }
