@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -126,23 +127,16 @@ func (a *PodProcessorApp) writeSpan(wspan *span.Span) error {
 	return nil
 }
 
-func watcher(ctx context.Context, clientset *kubernetes.Clientset, podCache *PodCache, namespace string) {
-	watchpods, err := clientset.CoreV1().Pods(namespace).Watch(metav1.ListOptions{})
-	if err != nil {
-		switch statusErr := err.(type) {
-		case *errors.StatusError:
-			log.Fatalf("Could not watch pods (%#v): %s ", statusErr.ErrStatus.Details, statusErr.ErrStatus.Reason)
-		default:
-			log.Fatalf("Could not watch pods: %#v", err)
-		}
-	}
+func handleWatch(ctx context.Context, watchpods watch.Interface, podCache *PodCache, namespace string) error {
+
+	defer watchpods.Stop()
 	for {
 		select {
 		case event := <-watchpods.ResultChan():
 			p, ok := event.Object.(*v1.Pod)
 			if !ok {
 				logrus.WithField("event", event).Warn("Could not convert watch event into pod")
-				continue
+				return nil
 			}
 			switch event.Type {
 			case watch.Added:
@@ -157,7 +151,23 @@ func watcher(ctx context.Context, clientset *kubernetes.Clientset, podCache *Pod
 				logrus.WithField("namespace", p.ObjectMeta.Namespace).WithField("name", p.ObjectMeta.Name).Debug("Deleted pod from cache")
 			}
 		case <-ctx.Done():
-			watchpods.Stop()
+			return fmt.Errorf("stop received")
+		}
+	}
+}
+
+func watcher(ctx context.Context, clientset *kubernetes.Clientset, podCache *PodCache, namespace string) {
+	for {
+		watchpods, err := clientset.CoreV1().Pods(namespace).Watch(metav1.ListOptions{})
+		if err != nil {
+			switch statusErr := err.(type) {
+			case *errors.StatusError:
+				log.Fatalf("Could not watch pods (%#v): %s ", statusErr.ErrStatus.Details, statusErr.ErrStatus.Reason)
+			default:
+				log.Fatalf("Could not watch pods: %#v", err)
+			}
+		}
+		if err := handleWatch(ctx, watchpods, podCache, namespace); err != nil {
 			return
 		}
 	}
