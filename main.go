@@ -147,7 +147,11 @@ func watcher(ctx context.Context, clientset *kubernetes.Clientset, podCache *Pod
 	for {
 		select {
 		case event := <-watchpods.ResultChan():
-			p := event.Object.(*v1.Pod)
+			p, ok := event.Object.(*v1.Pod)
+			if !ok {
+				logrus.WithField("event", event).Warn("Could not convert watch event into pod")
+				continue
+			}
 			switch event.Type {
 			case watch.Added:
 				existing, ok := podCache.Get(p.ObjectMeta.Name)
