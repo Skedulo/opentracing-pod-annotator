@@ -130,17 +130,20 @@ func (a *PodProcessorApp) writeSpan(wspan *span.Span) error {
 func handleWatch(ctx context.Context, watchpods watch.Interface, podCache *PodCache, namespace string) error {
 
 	defer watchpods.Stop()
+	var p, existing *v1.Pod
+	var ok bool
+	var event watch.Event
 	for {
 		select {
-		case event := <-watchpods.ResultChan():
-			p, ok := event.Object.(*v1.Pod)
+		case event = <-watchpods.ResultChan():
+			p, ok = event.Object.(*v1.Pod)
 			if !ok {
 				logrus.WithField("event", event).Warn("Could not convert watch event into pod")
 				return nil
 			}
 			switch event.Type {
 			case watch.Added:
-				existing, ok := podCache.Get(p.ObjectMeta.Name)
+				existing, ok = podCache.Get(p.ObjectMeta.Name)
 				if ok && p.ObjectMeta.Namespace != existing.ObjectMeta.Namespace {
 					logrus.WithField("name", existing.ObjectMeta.Name).WithField("namespace", existing.ObjectMeta.Namespace).Warn("Pod already exists in cache")
 				}
@@ -157,8 +160,10 @@ func handleWatch(ctx context.Context, watchpods watch.Interface, podCache *PodCa
 }
 
 func watcher(ctx context.Context, clientset *kubernetes.Clientset, podCache *PodCache, namespace string) {
+	var watchpods watch.Interface
+	var err error
 	for {
-		watchpods, err := clientset.CoreV1().Pods(namespace).Watch(metav1.ListOptions{})
+		watchpods, err = clientset.CoreV1().Pods(namespace).Watch(metav1.ListOptions{})
 		if err != nil {
 			switch statusErr := err.(type) {
 			case *errors.StatusError:
